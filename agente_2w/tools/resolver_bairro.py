@@ -131,16 +131,17 @@ def _consultar_web(termo: str) -> tuple[str | None, list[str]]:
     _, nome_oficial = _obter_municipios()
     municipios_lista = ", ".join(sorted(nome_oficial.values()))
     prompt = (
-        f'Pesquise na web: "{termo} bairro município Rio de Janeiro"\n\n'
+        f'Pesquise na web: "{termo} bairro município estado do Rio de Janeiro RJ"\n\n'
         f"Com base no resultado, responda:\n"
         f"1. Qual o nome OFICIAL desse bairro/localidade?\n"
-        f"2. Em qual município ele fica?\n\n"
+        f"2. Em qual município do estado do Rio de Janeiro (RJ) ele fica?\n\n"
         f"Responda APENAS com o JSON abaixo:\n"
         f'{{"bairro": "<nome oficial do bairro>", "municipios": ["<municipio>"]}}\n\n'
-        f"REGRAS:\n"
+        f"REGRAS OBRIGATÓRIAS:\n"
+        f"- Considere APENAS o estado do Rio de Janeiro (RJ). Ignore completamente resultados de outros estados (MG, SP, BA, etc.).\n"
         f"- Os municípios DEVEM ser desta lista (ignore outros): {municipios_lista}\n"
         f"- Se o bairro existir em 2+ municípios da lista, inclua todos: {{\"municipios\": [\"X\", \"Y\"]}}\n"
-        f"- Se não for bairro/localidade conhecida em nenhum desses municípios:\n"
+        f"- Se não for bairro/localidade conhecida no estado do RJ ou em nenhum desses municípios:\n"
         f'  {{"bairro": null, "municipios": []}}'
     )
 
