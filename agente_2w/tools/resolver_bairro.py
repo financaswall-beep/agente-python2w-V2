@@ -140,6 +140,8 @@ def _consultar_web(termo: str) -> tuple[str | None, list[str]]:
         f"REGRAS OBRIGATÓRIAS:\n"
         f"- Considere APENAS o estado do Rio de Janeiro (RJ). Ignore completamente resultados de outros estados (MG, SP, BA, etc.).\n"
         f"- Os municípios DEVEM ser desta lista (ignore outros): {municipios_lista}\n"
+        f"- ATENÇÃO: bairros com nomes comuns (ex: Centro, Rocha, Vila Nova, Santa Rosa, Jardim, Laranjal) existem em MÚLTIPLOS municípios do RJ. Pesquise cuidadosamente se o bairro aparece em mais de um município da lista.\n"
+        f"- Só coloque UM único município se tiver CERTEZA ABSOLUTA de que o bairro existe apenas naquele. Na dúvida, inclua todos os possíveis.\n"
         f"- Se o bairro existir em 2+ municípios da lista, inclua todos: {{\"municipios\": [\"X\", \"Y\"]}}\n"
         f"- Se não for bairro/localidade conhecida no estado do RJ ou em nenhum desses municípios:\n"
         f'  {{"bairro": null, "municipios": []}}'
@@ -215,7 +217,7 @@ def resolver_bairro_municipio(
     if municipio_direto:
         return None, municipio_direto, None
 
-    # 1. Consulta cache (armazena apenas resultados não-ambíguos)
+    # 1. Consulta cache
     cache = bairro_municipio_cache_repo.buscar(termo)
     if cache is not None:
         logger.info(
@@ -229,7 +231,9 @@ def resolver_bairro_municipio(
     bairro, municipios = _consultar_web(termo)
 
     if len(municipios) > 1:
-        # Ambíguo: não salva no cache — o agente vai pedir que o cliente esclareça
+        # Ambíguo: NÃO salva no cache agora — o agente vai perguntar ao cliente
+        # qual município. Quando o cliente confirmar e o frete for calculado,
+        # localidade_frete.py salva o resultado confirmado no cache.
         logger.info(
             "Localidade ambígua '%s': municípios possíveis = %s",
             termo, municipios,

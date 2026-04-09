@@ -8,7 +8,7 @@ import logging
 import re
 from uuid import UUID
 
-from agente_2w.db import contexto_repo, cliente_repo, area_entrega_repo
+from agente_2w.db import contexto_repo, cliente_repo, area_entrega_repo, bairro_municipio_cache_repo
 from agente_2w.constantes import ChaveContexto
 from agente_2w.enums.enums import TipoDeVerdade, NivelConfirmacao, OrigemContexto
 from agente_2w.schemas.contexto_conversa import ContextoConversaCreate
@@ -264,6 +264,19 @@ def _consultar_e_registrar_frete(sessao_id: UUID) -> None:
                 fonte=OrigemContexto.backend,
             ))
             logger.info("Frete registrado: %s / %s = R$%s", municipio, bairro, valor_frete)
+
+            # Salva bairro→município no cache para evitar web_search futuro.
+            # Só salva quando o frete foi confirmado (municipio é válido).
+            if bairro:
+                try:
+                    bairro_municipio_cache_repo.salvar(
+                        termo_original=bairro,
+                        bairro=bairro,
+                        municipio=municipio,
+                        fonte="confirmado_frete",
+                    )
+                except Exception:
+                    logger.warning("Falha ao salvar cache confirmado para '%s'", bairro)
         else:
             # Limpar frete_valor antigo (mutuamente exclusivo)
             try:
