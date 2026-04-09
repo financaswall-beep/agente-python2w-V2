@@ -112,6 +112,31 @@ def buscar_pneus(
             largura=largura, perfil=perfil, aro=aro,
         )
 
+    # Log de demanda — registra busca por medida/marca (antes so logava busca por moto)
+    _termo = medida_texto or marca_modelo or f"{largura}/{perfil}-{aro}"
+    _preco = None
+    _larg = largura
+    _perf = perfil
+    _ar = aro
+    if resultados:
+        _preco = resultados[0].get("preco_venda")
+        if not _larg:
+            _larg = resultados[0].get("largura")
+        if not _perf:
+            _perf = resultados[0].get("perfil")
+        if not _ar:
+            _ar = resultados[0].get("aro")
+    log_demanda_pneu_repo.registrar_busca(
+        moto=_termo,
+        posicao="",
+        tinha_estoque=len(resultados) > 0,
+        fonte_resolucao="catalogo",
+        largura=_larg,
+        perfil=_perf,
+        aro=_ar,
+        preco_encontrado=float(_preco) if _preco else None,
+    )
+
     return {
         "quantidade": len(resultados),
         "pneus": resultados,
