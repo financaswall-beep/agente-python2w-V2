@@ -25,6 +25,15 @@ ACOES_POR_ETAPA: dict[EtapaFluxo, list[str]] = {
         "apresentar_opcoes",
         "explicar_falta",
         "pedir_escolha_cliente",
+        # Quando cliente confirma o pneu e ja informa entrega/pagamento no mesmo turno
+        # (ex: "quero esse, retira na loja, pago no pix"), a IA pode ir direto para
+        # entrega_pagamento sem passar por confirmacao_item separadamente.
+        "confirmar_item",
+        "finalizar_itens",
+        "perguntar_tipo_entrega",
+        "perguntar_forma_pagamento",
+        "registrar_entrega",
+        "registrar_pagamento",
         "responder_incerteza_segura",
     ],
     EtapaFluxo.confirmacao_item: [

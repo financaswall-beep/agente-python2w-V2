@@ -10,6 +10,7 @@ TRANSICOES_PERMITIDAS: dict[EtapaFluxo, list[EtapaFluxo]] = {
     ],
     EtapaFluxo.oferta: [
         EtapaFluxo.confirmacao_item,
+        EtapaFluxo.entrega_pagamento,  # cliente confirma o pneu e ja informa entrega/pagamento no mesmo turno
         EtapaFluxo.busca,
     ],
     EtapaFluxo.confirmacao_item: [
