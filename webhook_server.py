@@ -373,17 +373,27 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
 
     # 10. Extrair imagens e audios dos attachments
     attachments = data.get("attachments") or []
+
+    # Log de diagnostico: registra file_type de cada attachment para depuracao
+    for a in attachments:
+        logger.info(
+            "Attachment recebido: file_type=%s url=%s data_url=%s",
+            a.get("file_type"), a.get("url", "")[:80], a.get("data_url", "")[:80],
+        )
+
     imagens = [
         a.get("data_url") or a.get("url", "")
         for a in attachments
-        if a.get("file_type") == "image"
+        if a.get("file_type") in ("image", "image_file")
     ]
     imagens = [u for u in imagens if u]
 
+    _AUDIO_FILE_TYPES = {"audio", "audio_file", "audio/ogg", "audio/mpeg", "audio/mp4", "voice"}
     audios = [
         a.get("data_url") or a.get("url", "")
         for a in attachments
-        if a.get("file_type") == "audio"
+        if str(a.get("file_type", "")).lower() in _AUDIO_FILE_TYPES
+        or str(a.get("file_type", "")).lower().startswith("audio")
     ]
     audios = [u for u in audios if u]
 
