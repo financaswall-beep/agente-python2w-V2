@@ -290,6 +290,36 @@ def promover_para_pedido(sessao_id: UUID) -> Pedido:
         if i.status_item in _STATUS_PROMOVIVEL and i.pneu_id is not None
     ]
 
+    # Safety net: deduplicar por pneu_id — manter apenas o item mais recente.
+    # Evita que itens orfaos de conversas anteriores (mesma sessao longa)
+    # sejam promovidos junto com o item correto.
+    vistos: dict[str, object] = {}
+    for item in itens_validados:
+        chave = str(item.pneu_id)
+        if chave in vistos:
+            antigo = vistos[chave]
+            # Manter o mais recente (criado_em maior)
+            if item.criado_em > antigo.criado_em:
+                item_provisorio_repo.atualizar_status_item(
+                    antigo.id, StatusItemProvisorio.cancelado,
+                )
+                logger.warning(
+                    "Dedup promotor: item antigo %s cancelado (pneu=%s, criado=%s)",
+                    antigo.id, chave, antigo.criado_em,
+                )
+                vistos[chave] = item
+            else:
+                item_provisorio_repo.atualizar_status_item(
+                    item.id, StatusItemProvisorio.cancelado,
+                )
+                logger.warning(
+                    "Dedup promotor: item duplicado %s cancelado (pneu=%s, criado=%s)",
+                    item.id, chave, item.criado_em,
+                )
+        else:
+            vistos[chave] = item
+    itens_validados = list(vistos.values())
+
     # Valor do frete (apenas para entregas)
     valor_frete = Decimal("0")
     if tipo_entrega == TipoEntrega.entrega:

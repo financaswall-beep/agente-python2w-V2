@@ -430,17 +430,35 @@ _FATOS_BUSCA_CONTEXTO = [
 
 
 def _limpar_contexto_busca(sessao_id: UUID) -> None:
-    """Desativa fatos de busca da conversa anterior.
+    """Desativa fatos de busca da conversa anterior e cancela itens orfaos.
 
     Chamado quando a IA regressa para 'identificacao' — sinaliza nova conversa
     dentro da mesma sessao (cliente voltou a cumprimentar ou mudou de assunto).
-    Sem isso, moto_modelo/posicao/pneus antigos contaminam a nova busca.
+    Sem isso, moto_modelo/posicao/pneus antigos contaminam a nova busca,
+    e itens provisorios de compras anteriores sao promovidos indevidamente.
     """
     for chave in _FATOS_BUSCA_CONTEXTO:
         try:
             contexto_repo.desativar_fato_anterior(sessao_id, chave)
         except Exception:
             logger.exception("Falha ao limpar fato '%s' no reset para identificacao", chave)
+
+    # Cancelar itens provisorios orfaos da conversa anterior.
+    # Voltar para identificacao = nova compra; itens antigos nao devem ser promovidos.
+    try:
+        itens_ativos = item_provisorio_repo.listar_itens_ativos_por_sessao(sessao_id)
+        for item in itens_ativos:
+            item_provisorio_repo.atualizar_status_item(
+                item.id, StatusItemProvisorio.cancelado,
+            )
+        if itens_ativos:
+            logger.info(
+                "Itens orfaos cancelados ao regredir para identificacao: sessao=%s, qtd=%d",
+                sessao_id, len(itens_ativos),
+            )
+    except Exception:
+        logger.exception("Falha ao cancelar itens orfaos na sessao %s", sessao_id)
+
     logger.info("Contexto de busca limpo: sessao=%s regressou para identificacao", sessao_id)
 
 
