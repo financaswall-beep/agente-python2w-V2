@@ -840,17 +840,6 @@ def processar_turno(
     # --- 6. Aplicar fatos observados ---
     _aplicar_fatos_observados(sessao_id, envelope.fatos_observados, msg_entrada.id)
 
-    # --- 6a. Popular cache bairro/municipio para inteligencia comercial ---
-    # Toda vez que a IA registrar um municipio/bairro, resolver via web search/cache
-    # para popular bairro_municipio_cache e contar acessos (atendido ou nao).
-    for _fato_obs in envelope.fatos_observados:
-        if _fato_obs.chave in ("municipio", "municipio_entrega") and _fato_obs.valor:
-            try:
-                from agente_2w.tools.resolver_bairro import resolver_bairro_municipio
-                resolver_bairro_municipio(str(_fato_obs.valor))
-            except Exception:
-                logger.debug("resolver_bairro_municipio falhou para '%s'", _fato_obs.valor)
-
     # --- 6b. Fallback: capturar forma_pagamento e tipo_entrega se IA nao registrou ---
     _extrair_fatos_estruturados_fallback(sessao_id, mensagem_texto, msg_entrada.id)
 

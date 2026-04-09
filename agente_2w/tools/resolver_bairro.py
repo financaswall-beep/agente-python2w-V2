@@ -158,6 +158,7 @@ def _consultar_web(termo: str) -> tuple[str | None, list[str]]:
                     "timezone": "America/Sao_Paulo",
                 },
             }],
+            timeout=15,
         )
 
         texto = response.output_text or ""
