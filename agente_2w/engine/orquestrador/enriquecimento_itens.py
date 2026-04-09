@@ -121,6 +121,21 @@ def _aplicar_mudancas_itens(sessao_id: UUID, mudancas, pneus_encontrados: list[d
                     else StatusItemProvisorio.sugerido
                 )
 
+                # --- GUARDA ANTI-DUPLICATA: nao criar item se ja existe um ativo
+                # com o mesmo pneu_id na sessao. Evita duplicacao por IA ou race condition.
+                if pneu_uuid:
+                    itens_existentes = item_provisorio_repo.listar_itens_ativos_por_sessao(sessao_id)
+                    duplicata = next(
+                        (i for i in itens_existentes if i.pneu_id and str(i.pneu_id) == str(pneu_uuid)),
+                        None,
+                    )
+                    if duplicata:
+                        logger.info(
+                            "Item duplicado ignorado: pneu_id=%s ja existe como item %s",
+                            pneu_uuid, duplicata.id,
+                        )
+                        continue
+
                 item_provisorio_repo.criar_item(ItemProvisorioCreate(
                     sessao_chat_id=sessao_id,
                     status_item=status_inicial,

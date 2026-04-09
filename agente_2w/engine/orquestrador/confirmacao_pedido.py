@@ -73,7 +73,12 @@ def _montar_confirmacao_pedido(pedido) -> str:
         for item in itens:
             pneu = catalogo_repo.buscar_pneu_por_id(item.pneu_id)
             nome = pneu.descricao_comercial if pneu else "Pneu"
-            posicao = f" {item.posicao.value}" if item.posicao else ""
+            posicao = ""
+            if item.posicao:
+                # Evita "traseiro traseiro" quando descricao_comercial ja contem a posicao
+                pos_val = item.posicao.value
+                if pos_val.lower() not in nome.lower():
+                    posicao = f" {pos_val}"
             linhas_itens.append(
                 f"• {item.quantidade}x {nome}{posicao} — R${item.preco_unitario:.2f}"
             )
