@@ -42,6 +42,8 @@ from agente_2w.schemas.contexto_conversa import ContextoConversaCreate
 from agente_2w.schemas.item_provisorio import ItemProvisorioCreate
 from agente_2w.schemas.resposta_turno import RespostaTurno
 
+from agente_2w import chatwoot_sync
+
 logger = logging.getLogger(__name__)
 
 MENSAGEM_FALHA_SEGURA = (
@@ -758,6 +760,8 @@ def processar_turno(
     criado_em: datetime | None = None,
     message_id_externo: str | None = None,
     imagens: list[str] | None = None,
+    chatwoot_conv_id: int | None = None,
+    chatwoot_contact_id: int | None = None,
 ) -> RespostaTurno:
     """Processa um turno completo da conversa.
 
@@ -851,6 +855,12 @@ def processar_turno(
     if sessao_apos_fatos and sessao_apos_fatos.cliente_id:
         _atualizar_nome_cliente(sessao_id, sessao_apos_fatos.cliente_id)
         _atualizar_localidade_cliente(sessao_id, sessao_apos_fatos.cliente_id)
+
+    # Sync nome do cliente no Chatwoot quando coletado neste turno
+    if chatwoot_contact_id and sessao_apos_fatos and sessao_apos_fatos.cliente_id:
+        fato_nome = contexto_repo.buscar_fato_ativo(sessao_id, ChaveContexto.NOME_CLIENTE)
+        if fato_nome and fato_nome.valor_texto:
+            chatwoot_sync.sincronizar_nome_cliente(chatwoot_contact_id, fato_nome.valor_texto)
 
     # --- 7c. Cancelamento solicitado via fato ---
     fato_cancel = contexto_repo.buscar_fato_ativo(sessao_id, ChaveContexto.PEDIDO_CANCELAMENTO_SOLICITADO)
@@ -969,10 +979,16 @@ def processar_turno(
                 criado_em=criado_em,
                 message_id_externo=message_id_externo,
                 imagens=imagens,
+                chatwoot_conv_id=chatwoot_conv_id,
+                chatwoot_contact_id=chatwoot_contact_id,
             )
 
     # --- 11. Avaliar transicao de etapa ---
     _avaliar_transicao(sessao_id, contexto.sessao.etapa_atual, envelope.etapa_atual)
+
+    # Sync label da etapa no Chatwoot
+    if chatwoot_conv_id:
+        chatwoot_sync.sincronizar_etapa(chatwoot_conv_id, envelope.etapa_atual.value)
 
     # --- 12. Auto-promover em fechamento se pre-condicoes ok ---
     # Se a etapa resultante e fechamento e o promotor nao foi chamado
@@ -990,6 +1006,12 @@ def processar_turno(
                     "Auto-promocao em fechamento: pedido #%s (valor=%s)",
                     pedido_criado.numero_pedido, pedido_criado.valor_total,
                 )
+                if chatwoot_conv_id:
+                    chatwoot_sync.sincronizar_pedido_criado(
+                        chatwoot_conv_id,
+                        pedido_criado.numero_pedido,
+                        pedido_criado.valor_total,
+                    )
                 sessao_atual = sessao_repo.buscar_sessao_por_id(sessao_id)
                 if sessao_atual and sessao_atual.cliente_id:
                     _atualizar_localidade_cliente(sessao_id, sessao_atual.cliente_id)
