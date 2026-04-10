@@ -455,6 +455,8 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
                     content,
                     message_id_externo=message_id,
                     imagens=imagens or None,
+                    chatwoot_conv_id=conversation_id,
+                    chatwoot_contact_id=chatwoot_contact_id,
                 )
 
                 # Enviar texto
