@@ -353,6 +353,8 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
         return {"status": "ignored", "reason": "wrong_inbox"}
 
     # 8. Extrair telefone — varios locais possiveis
+    chatwoot_contact_id = sender_meta.get("id") or sender.get("id")
+
     telefone_raw = (
         sender.get("phone_number")
         or sender_meta.get("phone_number")
