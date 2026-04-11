@@ -15,7 +15,7 @@ import os
 import re
 from collections import OrderedDict
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 
 import tempfile
@@ -106,6 +106,55 @@ def _get_turno_lock(telefone: str) -> asyncio.Lock:
 _http: httpx.AsyncClient | None = None
 
 
+# ---------------------------------------------------------------------------
+# Auto-resolve: fecha conversas com pedido + inatividade
+# ---------------------------------------------------------------------------
+
+async def _auto_resolver_conversas(horas: int = 72) -> int:
+    """Resolve conversas no Chatwoot com pedido criado e sem atividade por `horas` horas.
+
+    Apenas sessoes fechadas (pedido confirmado) com chatwoot_conv_id definido.
+    Retorna numero de conversas resolvidas.
+    """
+    from agente_2w import chatwoot_sync
+    from agente_2w.db.client import supabase
+
+    try:
+        corte = (datetime.now(timezone.utc) - timedelta(hours=horas)).isoformat()
+        res = (
+            supabase.table("sessao_chat")
+            .select("id, chatwoot_conv_id")
+            .eq("status_sessao", "fechada")
+            .not_.is_("chatwoot_conv_id", "null")
+            .lt("ultima_interacao_em", corte)
+            .execute()
+        )
+        sessoes = res.data or []
+    except Exception:
+        logger.exception("Erro ao buscar sessoes para auto-resolve")
+        return 0
+
+    resolvidas = 0
+    for s in sessoes:
+        try:
+            pedidos = (
+                supabase.table("pedido")
+                .select("id")
+                .eq("sessao_chat_id", s["id"])
+                .limit(1)
+                .execute()
+            )
+            if not pedidos.data:
+                continue
+            await asyncio.to_thread(chatwoot_sync.resolver_conversa, s["chatwoot_conv_id"])
+            logger.info("Auto-resolve: conv=%s sessao=%s", s["chatwoot_conv_id"], s["id"])
+            resolvidas += 1
+        except Exception:
+            logger.warning("Falha ao auto-resolver conv=%s", s.get("chatwoot_conv_id"), exc_info=True)
+
+    return resolvidas
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _http
@@ -115,7 +164,22 @@ async def lifespan(app: FastAPI):
     logger.info("  Account ID:  %s", CHATWOOT_ACCOUNT_ID)
     logger.info("  Supabase:    %s...", SUPABASE_URL[:40])
     logger.info("  Modelo:      %s", OPENAI_MODEL)
+
+    # Inicia scheduler de auto-resolve (roda a cada 6 horas)
+    async def _scheduler():
+        await asyncio.sleep(300)  # aguarda 5min após startup antes do primeiro check
+        while True:
+            try:
+                n = await _auto_resolver_conversas(horas=72)
+                if n:
+                    logger.info("Auto-resolve: %d conversa(s) resolvida(s)", n)
+            except Exception:
+                logger.exception("Erro no scheduler de auto-resolve")
+            await asyncio.sleep(6 * 3600)
+
+    task = asyncio.create_task(_scheduler())
     yield
+    task.cancel()
     await _http.aclose()
     logger.info("Webhook encerrado")
 
@@ -553,3 +617,21 @@ async def sync_pedido(request: Request):
     )
     logger.info("sync-pedido: conv=%s pedido=#%s", sessao.chatwoot_conv_id, numero_pedido)
     return {"status": "ok"}
+
+
+@app.post("/internal/auto-resolve")
+async def auto_resolve(request: Request):
+    """Dispara manualmente o auto-resolve de conversas antigas.
+
+    Query param opcional: horas (default=72). Use horas=0 para testar (resolve tudo).
+    Exemplo: POST /internal/auto-resolve?horas=0
+    """
+    horas_str = request.query_params.get("horas", "72")
+    try:
+        horas = int(horas_str)
+    except ValueError:
+        horas = 72
+
+    n = await _auto_resolver_conversas(horas=horas)
+    logger.info("auto-resolve manual: %d conversa(s) resolvida(s) (horas=%d)", n, horas)
+    return {"status": "ok", "resolvidas": n, "horas": horas}
