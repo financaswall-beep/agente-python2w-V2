@@ -873,6 +873,12 @@ def processar_turno(
         cancelado = cancelar_pedido_sessao(sessao_id)
         if cancelado:
             logger.info("Pedido da sessao %s cancelado via fato", sessao_id)
+            # Fechar sessao — cliente volta com sessao nova limpa
+            try:
+                sessao_repo.fechar_sessao(sessao_id)
+                logger.info("Sessao %s fechada apos cancelamento", sessao_id)
+            except Exception:
+                logger.exception("Falha ao fechar sessao apos cancelamento")
             if chatwoot_conv_id:
                 from agente_2w.db import pedido_repo as _ped_repo
                 _pedido = _ped_repo.buscar_pedido_por_sessao(sessao_id)
@@ -880,6 +886,7 @@ def processar_turno(
                     chatwoot_conv_id,
                     numero_pedido=_pedido.numero_pedido if _pedido else None,
                 )
+                chatwoot_sync.resolver_conversa(chatwoot_conv_id)
 
     # --- 8. Aplicar mudancas de contexto ---
     _aplicar_mudancas_contexto(sessao_id, envelope.mudancas_contexto)
