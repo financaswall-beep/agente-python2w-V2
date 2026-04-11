@@ -16,6 +16,8 @@ class SessaoChatBase(BaseModel):
     mensagem_motivo: Optional[str] = None
     campo_relacionado: Optional[str] = None
     acao_bloqueada: Optional[str] = None
+    chatwoot_conv_id: Optional[int] = None
+    chatwoot_contact_id: Optional[int] = None
 
     @model_validator(mode="after")
     def bloqueio_exige_motivo(self):

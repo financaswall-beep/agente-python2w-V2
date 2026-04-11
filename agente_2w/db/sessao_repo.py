@@ -136,3 +136,18 @@ def vincular_cliente(sessao_id: UUID, cliente_id: UUID) -> SessaoChat:
         return SessaoChat(**resultado.data[0])
     except Exception as e:
         raise ErroDeAtualizacao(_TABELA, f"vincular_cliente {sessao_id}: {e}") from e
+
+
+def salvar_chatwoot_ids(sessao_id: UUID, conv_id: int, contact_id: int | None = None) -> None:
+    """Persiste chatwoot_conv_id e chatwoot_contact_id na sessao.
+
+    Fail-safe: loga warning em vez de propagar excecao.
+    """
+    payload: dict = {"chatwoot_conv_id": conv_id}
+    if contact_id:
+        payload["chatwoot_contact_id"] = contact_id
+    try:
+        supabase.table(_TABELA).update(payload).eq("id", str(sessao_id)).execute()
+        logger.debug("Chatwoot IDs salvos: sessao=%s conv=%s contact=%s", sessao_id, conv_id, contact_id)
+    except Exception:
+        logger.warning("Falha ao salvar Chatwoot IDs na sessao %s", sessao_id, exc_info=True)

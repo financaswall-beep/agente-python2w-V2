@@ -3,6 +3,8 @@
 Endpoints:
     GET  /health          -> health check para Coolify (valida Supabase)
     POST /webhook/chatwoot -> recebe eventos do Chatwoot
+    POST /internal/sync-etapa  -> Supabase DB webhook: sessao_chat UPDATE
+    POST /internal/sync-pedido -> Supabase DB webhook: pedido INSERT
 """
 
 import asyncio
@@ -454,6 +456,13 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
 
                 sessao = await asyncio.to_thread(_obter_ou_criar_sessao, telefone)
 
+                # Persistir IDs do Chatwoot na sessao (idempotente, fail-safe)
+                if conversation_id and not sessao.chatwoot_conv_id:
+                    await asyncio.to_thread(
+                        sessao_repo.salvar_chatwoot_ids,
+                        sessao.id, conversation_id, chatwoot_contact_id,
+                    )
+
                 resposta = await asyncio.to_thread(
                     processar_turno,
                     sessao.id,
@@ -479,3 +488,68 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
     background_tasks.add_task(_processar_e_responder)
 
     return {"status": "processing", "message_id": message_id}
+
+
+# ---------------------------------------------------------------------------
+# Endpoints internos — Supabase Database Webhooks
+# ---------------------------------------------------------------------------
+
+@app.post("/internal/sync-etapa")
+async def sync_etapa(request: Request):
+    """Chamado pelo Supabase quando sessao_chat.etapa_atual muda.
+
+    Payload Supabase webhook (format: pg_net):
+    {
+      "type": "UPDATE",
+      "table": "sessao_chat",
+      "record": { ...row atual... },
+      "old_record": { ...row anterior... }
+    }
+    """
+    from agente_2w import chatwoot_sync
+
+    body = await request.json()
+    record = body.get("record") or {}
+    conv_id = record.get("chatwoot_conv_id")
+    etapa = record.get("etapa_atual")
+
+    if not conv_id or not etapa:
+        return {"status": "skipped", "reason": "sem conv_id ou etapa"}
+
+    chatwoot_sync.sincronizar_etapa(conv_id, etapa)
+    logger.info("sync-etapa: conv=%s etapa=%s", conv_id, etapa)
+    return {"status": "ok"}
+
+
+@app.post("/internal/sync-pedido")
+async def sync_pedido(request: Request):
+    """Chamado pelo Supabase quando um pedido é inserido.
+
+    Payload Supabase webhook:
+    {
+      "type": "INSERT",
+      "table": "pedido",
+      "record": { ...row do pedido... }
+    }
+    """
+    from agente_2w import chatwoot_sync
+    from agente_2w.db import sessao_repo
+
+    body = await request.json()
+    record = body.get("record") or {}
+    sessao_id = record.get("sessao_chat_id")
+    numero_pedido = record.get("numero_pedido")
+    valor_total = record.get("valor_total")
+
+    if not sessao_id or not numero_pedido:
+        return {"status": "skipped", "reason": "sem sessao_id ou numero_pedido"}
+
+    sessao = sessao_repo.buscar_sessao_por_id(sessao_id)
+    if not sessao or not sessao.chatwoot_conv_id:
+        return {"status": "skipped", "reason": "sessao sem chatwoot_conv_id"}
+
+    chatwoot_sync.sincronizar_pedido_criado(
+        sessao.chatwoot_conv_id, numero_pedido, valor_total or 0,
+    )
+    logger.info("sync-pedido: conv=%s pedido=#%s", sessao.chatwoot_conv_id, numero_pedido)
+    return {"status": "ok"}
