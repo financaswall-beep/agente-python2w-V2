@@ -242,11 +242,11 @@ def assignar_time(conv_id: int, team_id: int) -> None:
         logger.warning("Falha ao assignar time na conv %d", conv_id, exc_info=True)
 
 
-# Mapeamento motivo -> label extra
-_LABEL_POR_MOTIVO: dict[str, str] = {
-    "cliente_atacado": "emergencia",
-    "emergencia_pneu": "emergencia",
-    "frete_nao_coberto": "fora_de_area",
+# Mapeamento motivo -> labels extras (lista)
+_LABELS_POR_MOTIVO: dict[str, list[str]] = {
+    "cliente_atacado": ["atacado", "emergencia"],
+    "emergencia_pneu": ["emergencia"],
+    "frete_nao_coberto": ["fora_de_area"],
 }
 
 
@@ -258,8 +258,7 @@ def escalar_para_humano(
 ) -> None:
     """Escala conversa para atendimento humano — composta, cada etapa fail-safe."""
     adicionar_label(conv_id, "escalado_vendas")
-    label_extra = _LABEL_POR_MOTIVO.get(motivo)
-    if label_extra:
+    for label_extra in _LABELS_POR_MOTIVO.get(motivo, []):
         adicionar_label(conv_id, label_extra)
     definir_prioridade(conv_id, prioridade)
     if team_id:
