@@ -1536,3 +1536,41 @@ A IA **nunca** decide a prioridade — so emite o fato. O codigo em `escalacao_r
 ### Padrao reafirmado
 
 Mais uma aplicacao do principio **"IA interpreta, backend garante"**: a IA detecta a situacao e emite um fato; o codigo classifica a prioridade, cria o registro, silencia o bot e notifica o time humano — sem alucinacao possivel.
+
+---
+
+## Fase 30 — Filtro de Bots e Contas Automatizadas
+
+### Motivacao
+
+A Claro (operadora) enviou mensagem automatica pro numero da loja via WhatsApp. O bot respondeu, a IA da Claro respondeu de volta, e entrou em loop infinito (IA x IA). Cada uma achando que a outra era um cliente.
+
+### Solucao
+
+Filtro de 3 camadas no `webhook_server.py`, executado antes de qualquer processamento:
+
+1. **Identifier `@lid`** — contas WhatsApp Business API (bots corporativos) usam identifier terminando em `@lid` em vez de `@s.whatsapp.net`. Qualquer mensagem com esse sufixo e ignorada.
+
+2. **Blocklist de telefones** — set `_TELEFONES_BLOQUEADOS` com numeros conhecidos de bots:
+   - `5511999910621` — Minha Claro
+
+3. **Padrao no nome do sender** — regex `_NOMES_BOT_PATTERNS` detecta nomes como "Minha Claro", "Suporte X", "SAC", "Atendimento X", "chatbot", "noreply".
+
+### Codigo
+
+```python
+def _eh_bot_ou_empresa(identifier, nome, telefone) -> bool:
+    if identifier and identifier.endswith("@lid"):
+        return True
+    if telefone in _TELEFONES_BLOQUEADOS:
+        return True
+    if nome and _NOMES_BOT_PATTERNS.search(nome):
+        return True
+    return False
+```
+
+Quando detectado, retorna `{"status": "ignored", "reason": "bot_sender"}` sem criar sessao nem processar.
+
+### Manutencao
+
+Para bloquear novos bots, basta adicionar o telefone em `_TELEFONES_BLOQUEADOS` ou ajustar o regex `_NOMES_BOT_PATTERNS` no `webhook_server.py`.
