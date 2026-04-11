@@ -55,6 +55,11 @@ _MAX_CACHE = 5000
 _cache_lock = Lock()
 _mensagens_processadas: OrderedDict[str, bool] = OrderedDict()
 
+# ---------------------------------------------------------------------------
+# Conversas silenciadas manualmente (stop bot pra conversa especifica)
+# ---------------------------------------------------------------------------
+_conversas_silenciadas: set[int] = set()
+
 
 def _mensagem_ja_processada(message_id: str) -> bool:
     """Verifica e registra message_id de forma thread-safe."""
@@ -478,6 +483,11 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
         )
         return {"status": "ignored", "reason": "bot_sender"}
 
+    # 8c. Conversa silenciada manualmente (stop bot)
+    if conversation_id and conversation_id in _conversas_silenciadas:
+        logger.info("Bot silenciado manualmente: conv=%s", conversation_id)
+        return {"status": "ignored", "reason": "manually_silenced"}
+
     # 9. Dedup
     if _mensagem_ja_processada(message_id):
         return {"status": "ignored", "reason": "duplicate"}
@@ -760,3 +770,36 @@ async def resolver_escalacao_endpoint(request: Request):
     except Exception as e:
         logger.exception("Erro ao resolver escalacao: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Stop bot — silenciar/liberar conversa especifica
+# ---------------------------------------------------------------------------
+
+@app.post("/internal/stop-bot/{conversation_id}")
+async def stop_bot(conversation_id: int):
+    """Silencia o bot para uma conversa especifica.
+
+    Uso: POST /internal/stop-bot/46
+    O bot para de responder naquela conversa ate chamar /internal/start-bot/46.
+    """
+    _conversas_silenciadas.add(conversation_id)
+    logger.info("Bot silenciado manualmente: conv=%s (total silenciadas: %d)", conversation_id, len(_conversas_silenciadas))
+    return {"status": "ok", "conversation_id": conversation_id, "action": "silenciado"}
+
+
+@app.post("/internal/start-bot/{conversation_id}")
+async def start_bot(conversation_id: int):
+    """Libera o bot para voltar a responder numa conversa.
+
+    Uso: POST /internal/start-bot/46
+    """
+    _conversas_silenciadas.discard(conversation_id)
+    logger.info("Bot liberado: conv=%s (total silenciadas: %d)", conversation_id, len(_conversas_silenciadas))
+    return {"status": "ok", "conversation_id": conversation_id, "action": "liberado"}
+
+
+@app.get("/internal/conversas-silenciadas")
+async def listar_silenciadas():
+    """Lista conversas que estao com bot silenciado manualmente."""
+    return {"conversas_silenciadas": sorted(_conversas_silenciadas)}
